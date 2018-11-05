@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html>
+<script type="text/javascript" src="http://code.jquery.com/jquery-1.7.1.min.js"></script>
+
+<style type="text/css">
+	#mydiv {
+    position:fixed;
+    top: 5%;
+    left: 25%;
+    width:50%;
+    height:90%;
+    border: 1px solid #ccc;
+    background-color: #f3f3f3;
+    text-align: center;
+    padding-left: 10px;
+}
+#form{
+	text-align: left;
+
+}
+
+#footer{
+	 position:fixed;
+
+	 bottom: 1%;
+	 text-align: center;
+
+}
+
+.button {
+  background: #3498db;
+  background-image: -webkit-linear-gradient(top, #3498db, #2980b9);
+  background-image: -moz-linear-gradient(top, #3498db, #2980b9);
+  background-image: -ms-linear-gradient(top, #3498db, #2980b9);
+  background-image: -o-linear-gradient(top, #3498db, #2980b9);
+  background-image: linear-gradient(to bottom, #3498db, #2980b9);
+  -webkit-border-radius: 14;
+  -moz-border-radius: 14;
+  border-radius: 14px;
+  -webkit-box-shadow: 0px 1px 3px #666666;
+  -moz-box-shadow: 0px 1px 3px #666666;
+  box-shadow: 0px 1px 3px #666666;
+  font-family: Courier New;
+  color: #ffffff;
+  font-size: 20px;
+  padding: 10px 20px 10px 20px;
+  text-decoration: none;
+}
+
+.button:hover {
+  background: #3cb0fd;
+  background-image: -webkit-linear-gradient(top, #3cb0fd, #3498db);
+  background-image: -moz-linear-gradient(top, #3cb0fd, #3498db);
+  background-image: -ms-linear-gradient(top, #3cb0fd, #3498db);
+  background-image: -o-linear-gradient(top, #3cb0fd, #3498db);
+  background-image: linear-gradient(to bottom, #3cb0fd, #3498db);
+  text-decoration: none;
+}
+
+.custom-file-input::-webkit-file-upload-button {
+  visibility: hidden;
+}
+.custom-file-input::before {
+  content: 'Select some files';
+  display: inline-block;
+  background: -webkit-linear-gradient(top, #f9f9f9, #e3e3e3);
+  border: 1px solid #999;
+  border-radius: 3px;
+  padding: 5px 8px;
+  outline: none;
+  white-space: nowrap;
+  -webkit-user-select: none;
+  cursor: pointer;
+  text-shadow: 1px 1px #fff;
+  font-weight: 700;
+  font-size: 10pt;
+}
+.custom-file-input:hover::before {
+  border-color: black;
+}
+.custom-file-input:active::before {
+  background: -webkit-linear-gradient(top, #e3e3e3, #f9f9f9);
+}
+
+#logarea {
+    overflow-y: scroll;
+    width: 98%;
+    resize: none;
+}
+
+td {    
+    display: block;
+    float: left;
+    padding: 10px 0;
+    margin-right:100px;
+}
+td:last-child {
+    margin-right: 0;
+}
+
+
+</style>
+<title>LOCDB web service</title>
+
+
+<body>
+<script type="text/javascript">
+
+$( document ).ready(function() {
+	if ({{waiting}} == "1") {
+		check();
+	setTimeout(function(){document.getElementById("data_form").submit();}, 5000);	
+	}
+});
+
+function check()
+
+{
+
+$("#checking").show();
+
+}
+
+
+
+</script> 
+
+ <div id="mydiv" text-align="center">
+
+     <h2 class="title">Upload File for Reference Segmentation</h2>
+    
+<table> <tr> <td>
+    <form id="form" action="{{ url_for('fileupload') }}" method="post" enctype="multipart/form-data">
+      <div>
+        <input type="checkbox" name="pdfFlag" checked> Process PDF files as images<br/><br/>
+        <input type="checkbox" name="Txt_Dummy" unchecked> Add dummy text for text files<br/><br/>
+	<!--<input type="checkbox" name="autoviewResults" checked> Automatic get results<br/><br/>
+        <input type="checkbox" name="colBool" unchecked> Process as multi-column files with 
+	<input type="number" name="colNumb" value="2" min="2" max="4" required> columns<br/><br/>-->
+	<input class=custom-file-input" type="file" name="files" placeholder="File" multiple><br/><br/>
+        <input class="button" type=submit value="Process the file" onClick="check();">
+      </div>
+    </form>
+</td><td>
+    <form id="form" action="{{ url_for('fileview') }}" method="post" enctype="multipart/form-data">
+      <div>
+	<h2> Result file browser</h2>
+	<input class=custom-file-input" type="file" name="files" placeholder="File" multiple><br/><br/>
+        <input class="button" type=submit value="View results" onClick="check();">
+      </div>
+    </form>
+</td></tr></table>
+    <h2>Additional App Functions</h2>
+
+<br />
+<form id="form" action="{{ url_for('logupdate') }}" method="post" enctype="multipart/form-data">
+<textarea id="logarea" rows="5" readonly>{{ logText }}
+</textarea>
+<input class="button" type=submit value="Log Update" onClick="logUpdate();">
+</form>
+
+<form id="data_form" style="display:none;" action="{{ url_for('pollresult') }}" method="post" enctype="multipart/form-data">
+<textarea id="logarea" name="filenames_field" readonly>{{ filesText }}
+</textarea>
+</form>
+
+<div>
+    <div id="checking" style="display:none;position: fixed;top: 0;left: 0;width: 100%;height: 100%;background: #f4f4f4;z-index: 99;">
+	<div class="text" style="position: absolute;top: 45%;left: 0;height: 100%;width: 100%;font-size: 18px;text-align: center;">
+	    <center> <img src="{{url_for('static', filename='load.gif')}}" alt="Loading" /> </center>
+	    Processing the file.... <Br> Please be patient
+	</div>
+</div>
+  
+<footer id="footer">
+<a target="blank" href="https://locdb.bib.uni-mannheim.de/blog/de/">Web service for LOCDB project</a>
+<a target="blank" href="https://config.opendfki.de/imprint">Impressum</a>
+<a target="blank" href="http://www.dfki.uni-kl.de/datenschutz/data-protection-en.html">Data Protection Notice</a>
+</footer>
+</div>
+
+
+</body>
+ 
+ </html>
