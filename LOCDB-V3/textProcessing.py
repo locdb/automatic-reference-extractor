@@ -1,9 +1,12 @@
 import bs4 as bs
 import os
 import subprocess
+import requests
 
-from pathParameter import parsCit,LOCDB, pdfInspector
-from logWriter import writeLog, writeUserLog#, writeCorrect 
+from pathParameter import parsCit,LOCDB, pdfInspector, grobid
+from logWriter import writeLog, writeUserLog
+#from imageProcessing import processIndividualGrobid
+from imgProcessing import mapXmlOutputIndividual
 
 def check_file_extension(filename, ext):
     return '.' in filename and \
@@ -39,10 +42,17 @@ def fileuploadText(UPLOAD_FOLDER, OUTPUT_FOLDER, settings, filename):
         f.write(parscitstring)
      
     outputxmlsoup =createBibstruct(filename)
+    
+    if filename[-3:].lower() == "pdf":
+        output_grobid = processfileGrobid(UPLOAD_FOLDER, filename)
+        xmltags3 = output_grobid.find_all('BibStructured')
+        
+        algotag3 = outputxmlsoup.algorithm
+        for curr in xmltags3:
+            algotag3.append(curr)
      
-    #delete tmp files
-    os.remove("tmp/" + filename+'_Textdummy.txt')
-    os.remove("tmp/" + filename+'_ParsText.xml')
+    os.system("mv "+LOCDB+"tmp/"+filename+'_Textdummy.txt '+LOCDB+"processed-files/"+filename+'_Textdummy.txt')
+    os.system("mv "+LOCDB+"tmp/"+filename+'_ParsText.txt '+LOCDB+"processed-files/"+filename+'_ParsText.txt')
 
     os.makedirs(OUTPUT_FOLDER + filename)
     with open(OUTPUT_FOLDER + filename + "/Output" + filename+'.xml','w') as xmlf:
@@ -164,3 +174,20 @@ def createBibstruct(filename):
         del c['confidence']
 
     return soup
+
+def processfileGrobid(UPLOAD_FOLDER, filename):
+    grobid_url = grobid+"processReferences"
+    files = {'input': open(LOCDB+UPLOAD_FOLDER+filename, 'rb')}
+    try:
+        response = requests.post(grobid_url, files=files)
+    except:
+        print "Error accessing Grobid Service"
+    
+    xmlString = response.text.encode('utf8')
+    output = mapXmlOutputIndividual(xmlString)
+    xmltags= output.find_all('BibStructured')
+    for tag4 in xmltags:
+        tag4['detector'] = 'Grobid'
+        tag4['namer'] = 'Grobid'
+    
+    return output

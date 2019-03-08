@@ -3,7 +3,7 @@ from shutil import copyfile
 import os
 from PIL import Image
 import subprocess
-from pathParameter import LOCDB, parsCit, detectronDir, grobid, modelPath, debugMode, modelPath2
+from pathParameter import LOCDB, parsCit, detectronDir, grobid, modelPath, debugMode, modelPath2, gpuSupport
 from logWriter import writeLog, writeUserLog
 import numpy as np
 import requests
@@ -28,57 +28,60 @@ def fileuploadIMG(UPLOAD_FOLDER, OUTPUT_FOLDER, settings, filename):
         os.system("convert "+UPLOAD_FOLDER+filename+" -resize 3500x3500 -quality 100 -density 300x300 "+UPLOAD_FOLDER+filename)
     
     copyfile(UPLOAD_FOLDER + filename, LOCDB+"images-tmp/"+filename)
-    
-    # Detecting layout Here (Number of columns)
-    resultsFile = open(LOCDB+"tmp"+"/layout-inference-results-"+filename[:-4]+".txt","w")
-    resultsFile.close()
-    try:
-        subprocess.call(["python2 tools/infer_simple-custom2.py --cfg "+detectronDir+"configs/custom/e2e_faster_rcnn_R-50-C4_1x-column-detector.yaml --output-dir "+LOCDB + "tmp"+" --image-ext "+filename[-3:]+" --wts "+modelPath2+"default_model_layout.pkl "+LOCDB+"images-tmp/"+filename], shell=True, cwd=detectronDir)
-    except:
-        return "An error occurred during layout inference stage..."
-    
-    os.system("mv "+LOCDB+"tmp/layout-inference-results.txt "+LOCDB+"tmp/layout-inference-results-"+filename[:-4]+".txt")
-    os.system("mv "+LOCDB+"tmp/"+filename+".pdf "+LOCDB+"processed-files/"+filename+"-layout.pdf")
-    
-    
-    ################ Splitting Page into Columns ##############################
-    f = open(LOCDB +"tmp/"+"layout-inference-results-"+filename[:-4]+".txt", "r")
-    all_lines = f.readlines()
-    f.close()
-    
-    if debugMode.lower() == "yes":
-        print "len(all_lines):",len(all_lines)
-    
-    columns_confidence = []
-    columns_boxes = []
-    for line in all_lines:
-        if line[0] == "\n":
-            continue
-        if line[0] == "/":
-            name = line.split('/')[(len(line.split('/'))-1)]
-            if name.strip() == filename.strip():
-                currFile = True
-            else:
-                currFile = False
-            continue
+    # GPU Start
+    if gpuSupport.lower() == "yes":
+        # Detecting layout Here (Number of columns)
+        resultsFile = open(LOCDB+"tmp"+"/layout-inference-results-"+filename[:-4]+".txt","w")
+        resultsFile.close()
+        try:
+            subprocess.call(["python2 tools/infer_simple-custom2.py --cfg "+detectronDir+"configs/custom/e2e_faster_rcnn_R-50-C4_1x-column-detector.yaml --output-ext jpg --output-dir "+LOCDB + "tmp"+" --image-ext "+filename[-3:]+" --wts "+modelPath2+"default_model_layout.pkl "+LOCDB+"images-tmp/"+filename], shell=True, cwd=detectronDir)
+        except:
+            return "An error occurred during layout inference stage..."
         
-        if currFile == True:
-            chunks = line.strip().split(" ")
-            columns_boxes.append([int(float(chunks[0])),int(float(chunks[1])),int(float(chunks[2])),int(float(chunks[3]))])
-            columns_confidence.append(float(chunks[4]))
+        print "Moving filename:",filename
+        os.system("mv "+LOCDB+"tmp/layout-inference-results.txt "+LOCDB+"tmp/layout-inference-results-"+filename[:-4]+".txt")
+        #os.system("mv "+LOCDB+"tmp/"+filename+".pdf "+LOCDB+"processed-files/"+filename+"-layout.pdf")
+        os.system("mv "+LOCDB+"tmp/"+filename+".jpg "+LOCDB+"processed-files/"+filename+"-layout.jpg")
         
-    temp_j = 0
-    for curr1, curr2 in zip(columns_confidence, columns_boxes):
-        if curr1 < column_confidence_threshold:
-            del columns_confidence[temp_j]
-            del columns_boxes[temp_j]
-            continue
-        temp_j += 1
-    
-    number_of_columns = len(columns_confidence)
+        
+        ################ Splitting Page into Columns ##############################
+        f = open(LOCDB +"tmp/"+"layout-inference-results-"+filename[:-4]+".txt", "r")
+        all_lines = f.readlines()
+        f.close()
+        
+        if debugMode.lower() == "yes":
+            print "len(all_lines):",len(all_lines)
+        
+        columns_confidence = []
+        columns_boxes = []
+        for line in all_lines:
+            if line[0] == "\n":
+                continue
+            if line[0] == "/":
+                name = line.split('/')[(len(line.split('/'))-1)]
+                if name.strip() == filename.strip():
+                    currFile = True
+                else:
+                    currFile = False
+                continue
+            
+            if currFile == True:
+                chunks = line.strip().split(" ")
+                columns_boxes.append([int(float(chunks[0])),int(float(chunks[1])),int(float(chunks[2])),int(float(chunks[3]))])
+                columns_confidence.append(float(chunks[4]))
+            
+        temp_j = 0
+        for curr1, curr2 in zip(columns_confidence, columns_boxes):
+            if curr1 < column_confidence_threshold:
+                del columns_confidence[temp_j]
+                del columns_boxes[temp_j]
+                continue
+            temp_j += 1
+        
+        number_of_columns = len(columns_confidence)
     
     curr_fileNames = []
-    if number_of_columns > 1:
+    if (gpuSupport.lower() == "yes") and (number_of_columns > 1):
         # Sort Coordinates from left to right
         for i,curr1 in enumerate(columns_boxes):
             for j,curr2 in enumerate(columns_boxes):
@@ -130,18 +133,24 @@ def fileuploadIMG(UPLOAD_FOLDER, OUTPUT_FOLDER, settings, filename):
     else:
         curr_fileNames.append(filename)
     if debugMode.lower() == "yes":
-        print "curr_fileNames:",curr_fileNames                        
+        print "curr_fileNames:",curr_fileNames    
     
     all_tags = []
     for count,currFilename in enumerate(curr_fileNames):
         copyfile(UPLOAD_FOLDER+currFilename, LOCDB+"images-tmp/"+currFilename)
-        try:
-            subprocess.call(["python2 tools/infer_simple-custom.py --cfg "+detectronDir+"configs/custom/e2e_mask_rcnn_R-50-C4_1x-LOCDB.yaml --output-dir "+LOCDB + "tmp"+" --image-ext "+currFilename[-3:]+" --wts "+modelPath+"default_model.pkl "+LOCDB+"images-tmp/"+currFilename], shell=True, cwd=detectronDir)
-        except:
-            return "An error occurred during inference stage..."
+        if gpuSupport.lower() == "yes":
+            try:
+                #subprocess.call(["python2 tools/infer_simple-custom.py --cfg "+detectronDir+"configs/custom/e2e_mask_rcnn_R-50-C4_1x-LOCDB.yaml --output-ext jpg --output-dir "+LOCDB + "tmp"+" --image-ext "+currFilename[-3:]+" --wts "+modelPath+"default_model.pkl "+LOCDB+"images-tmp/"+currFilename], shell=True, cwd=detectronDir)
+                subprocess.call(["python2 tools/infer_simple-custom.py --cfg "+detectronDir+"configs/custom/e2e_mask_rcnn_R-50-C4_1x-LOCDB.yaml --output-ext jpg --output-dir "+LOCDB + "tmp"+" --image-ext "+currFilename[-3:]+" --wts "+modelPath+"default_model-upgraded.pkl "+LOCDB+"images-tmp/"+currFilename], shell=True, cwd=detectronDir)
+            except:
+                return "An error occurred during inference stage..."
+            print "Moving filename:",filename
+            os.system("mv "+LOCDB+"tmp/bbox-inference-results.txt "+LOCDB+"tmp/bbox-inference-results-"+currFilename[:-4]+".txt")
+            #os.system("mv "+LOCDB+"tmp/"+filename+".pdf "+LOCDB+"processed-files/"+filename+"-ref-detection.pdf")
+            os.system("mv "+LOCDB+"tmp/"+filename+".jpg "+LOCDB+"processed-files/"+filename+"-ref-detection.jpg")
         
-        os.system("mv "+LOCDB+"tmp/bbox-inference-results.txt "+LOCDB+"tmp/bbox-inference-results-"+currFilename[:-4]+".txt")
-        os.system("mv "+LOCDB+"tmp/"+filename+".pdf "+LOCDB+"processed-files/"+filename+"-ref-detection.pdf")
+        # GPU End
+        
         os.makedirs(LOCDB + "tmp/"+currFilename[:-4])
         copyfile(UPLOAD_FOLDER + currFilename, "tmp/" + currFilename)
         
@@ -149,6 +158,7 @@ def fileuploadIMG(UPLOAD_FOLDER, OUTPUT_FOLDER, settings, filename):
             ocrIMGTesseract(UPLOAD_FOLDER,currFilename)
         except:
             return "An error occurred during performing OCR..."
+        
         
         try:
             finalizedCoordinates,finalizedStrings = combineOcrOutputsTesseract(currFilename)
@@ -198,6 +208,9 @@ def fileuploadIMG(UPLOAD_FOLDER, OUTPUT_FOLDER, settings, filename):
     with open(OUTPUT_FOLDER + filename + "/Output" + filename + ".xml",'w') as xmlf:
         xmlf.write(soup.encode('utf-8'))
     
+    with open(LOCDB + "static/xmls/Output" + filename + ".xml",'w') as xmlf:
+        xmlf.write(soup.encode('utf-8'))
+        
     outputfile = OUTPUT_FOLDER + filename + "/Output" + filename+'.xml'
     outputcurrFilename = filename.replace(filename.split("_")[0], "")[1:]
     if os.path.exists(outputfile):
@@ -208,9 +221,12 @@ def fileuploadIMG(UPLOAD_FOLDER, OUTPUT_FOLDER, settings, filename):
         print ""
         print "Error inputfile : " + outputcurrFilename
         writeUserLog("Error inputfile : " + outputcurrFilename)
+    
+    # Draw detection boxes for visualization
+    draw_bbox_from_xml_output()
+    
     os.system("mv "+LOCDB+"tmp/layout-inference-results-"+filename[:-4]+".txt "+LOCDB+"processed-files/layout-inference-results-"+filename[:-4]+".txt")
     return algotag
-  
 
 def createBibstruct(filename, finalizedCoordinates,finalizedStrings):
     if debugMode.lower() == "yes":
@@ -597,10 +613,25 @@ def bb_intersection(pbox, obox):
     # compute the area of intersection rectangle
     interArea = max(0,(xB - xA)) * max(0,(yB - yA))        
     oboxArea = (obox[2] - obox[0] + 1) * (obox[3] - obox[1] + 1)    
-    percent = float(interArea) / oboxArea
+    pboxArea = (pbox[2] - pbox[0] + 1) * (pbox[3] - pbox[1] + 1)    
+    percent = float(interArea) / (pboxArea + oboxArea - interArea)
     
     return percent
 
+'''def bb_intersection_strange(pbox, obox):
+    # determine the (x, y)-coordinates of the intersection rectangle
+    xA = max(pbox[0], obox[0])
+    yA = max(pbox[1], obox[1])
+    xB = min(pbox[2], obox[2])
+    yB = min(pbox[3], obox[3])
+    
+    # compute the area of intersection rectangle
+    interArea = max(0,(xB - xA)) * max(0,(yB - yA))        
+    oboxArea = (obox[2] - obox[0] + 1) * (obox[3] - obox[1] + 1)    
+    percent = float(interArea) / oboxArea
+    
+    return percent
+'''
 
 def sortByCoordinates(coordinatesList,stringList):
     index1 = 0
@@ -626,7 +657,7 @@ def combineOcrOutputsTesseract(filename):
         print "####################################"
         print ""
     confidence_threshold = 0.75
-    iou = 0.7
+    iou = 0.5
     mergedBoxesCoordinates = []
     mergedBoxesStrings = []
     
@@ -638,72 +669,82 @@ def combineOcrOutputsTesseract(filename):
     
     inferenceBoxes = []
     inferenceBoxes_confidence = []
-    f = open(LOCDB +"tmp/"+"bbox-inference-results-"+filename[:-4]+".txt", "r")
-    lines = f.readlines()
-    f.close()
-    
-    name = None
-    for line in lines:
-        if line[0] == "\n":
-            continue
-        if line[0] == "/":
-            name = line.split('/')[(len(line.split('/'))-1)]
-            #print "name:",name
-            if name.strip() == filename.strip():
-                currFile = True
-            else:
-                currFile = False
-            continue
+    if gpuSupport.lower() == "yes":
+        f = open(LOCDB +"tmp/"+"bbox-inference-results-"+filename[:-4]+".txt", "r")
+        lines = f.readlines()
+        f.close()
         
-        if currFile == True:
-            chunks = line.strip().split(" ")
-            inferenceBoxes.append([int(float(chunks[0])),int(float(chunks[1])),int(float(chunks[2])),int(float(chunks[3]))])
-            inferenceBoxes_confidence.append(float(chunks[4]))
-    if debugMode.lower() == "yes":
-        print len(inferenceBoxes),len(inferenceBoxes_confidence)
-        print len(ocrBoxes),len(ocrLines)
-    iou2 = 0.5
-    for curr4,currConfidence in zip(inferenceBoxes, inferenceBoxes_confidence):
-        curr4 = [curr4[0],curr4[1],curr4[2],curr4[3]+10]
-        if currConfidence >= confidence_threshold:
-            tempBox = []
-            tempBoxString = ""
-            for curr3,currLine in zip(ocrBoxes,ocrLines):
-                www = abs(bb_intersection(curr4, curr3))
-                if www > 0:
-                    if debugMode.lower() == "yes":
-                        print ""
-                        print "iou:",www
-                        print currLine
-                        print "curr4:",curr4
-                        print "curr3:",curr3
-                        print "tempBox:",tempBox
-                
-                if abs(bb_intersection(curr4, curr3)) > iou2:
-                    tempBox.append(curr3)
-                    tempBoxString += " "+currLine
+        name = None
+        for line in lines:
+            if line[0] == "\n":
+                continue
+            if line[0] == "/":
+                name = line.split('/')[(len(line.split('/'))-1)]
+                #print "name:",name
+                if name.strip() == filename.strip():
+                    currFile = True
                 else:
-                    continue
-            
-            tempBoxString = tempBoxString.strip()
-            temp_x1 = []
-            temp_y1 = []
-            temp_x2 = []
-            temp_y2 = []
-            if len(tempBox) > 0:
-                for curr5 in tempBox:
-                    temp_x1.append(curr5[0])
-                    temp_y1.append(curr5[1])
-                    temp_x2.append(curr5[2])
-                    temp_y2.append(curr5[3])
-            else:
+                    currFile = False
                 continue
             
-            if abs(bb_intersection(curr4, [min(temp_x1), min(temp_y1), max(temp_x2), max(temp_y2)],)) > iou:
-                if debugMode.lower() == "yes":
-                    print "tempBoxString:",tempBoxString
-                mergedBoxesCoordinates.append([min(temp_x1), min(temp_y1), max(temp_x2), max(temp_y2)])
-                mergedBoxesStrings.append(tempBoxString)
+            if currFile == True:
+                chunks = line.strip().split(" ")
+                inferenceBoxes.append([int(float(chunks[0])),int(float(chunks[1])),int(float(chunks[2])),int(float(chunks[3]))])
+                inferenceBoxes_confidence.append(float(chunks[4]))
+        if debugMode.lower() == "yes":
+            print len(inferenceBoxes),len(inferenceBoxes_confidence)
+            print len(ocrBoxes),len(ocrLines)
+        iou2 = 0.03
+        for curr4,currConfidence in zip(inferenceBoxes, inferenceBoxes_confidence):
+            #curr4 = [curr4[0],curr4[1],curr4[2],curr4[3]+10]
+            curr4 = [curr4[0],curr4[1],curr4[2],curr4[3]]
+            if currConfidence >= confidence_threshold:
+                
+                tempBox = []
+                tempBoxString = ""
+                for curr3,currLine in zip(ocrBoxes,ocrLines):
+                    www = abs(bb_intersection(curr4, curr3))
+                    if www > 0:
+                        if debugMode.lower() == "yes":
+                            print ""
+                            print "iou:",www
+                            print currLine
+                            print "curr4:",curr4
+                            print "curr3:",curr3
+                            print "tempBox:",tempBox
+                    
+                    if abs(bb_intersection(curr4, curr3)) > iou2:
+                        print "bb_intersection(curr4, curr3):",bb_intersection(curr4, curr3)
+                        print "curr3:",curr3
+                        tempBox.append(curr3)
+                        tempBoxString += " "+currLine
+                    else:
+                        continue
+                
+                tempBoxString = tempBoxString.strip()
+                temp_x1 = []
+                temp_y1 = []
+                temp_x2 = []
+                temp_y2 = []
+                if len(tempBox) > 0:
+                    for curr5 in tempBox:
+                        temp_x1.append(curr5[0])
+                        temp_y1.append(curr5[1])
+                        temp_x2.append(curr5[2])
+                        temp_y2.append(curr5[3])
+                else:
+                    continue
+                
+                print ""
+                print "curr4:",curr4
+                print "[min(temp_x1), min(temp_y1), max(temp_x2), max(temp_y2)]:",[min(temp_x1), min(temp_y1), max(temp_x2), max(temp_y2)]
+                print "bb_intersection(curr4, [min(temp_x1), min(temp_y1), max(temp_x2), max(temp_y2)]):",bb_intersection(curr4, [min(temp_x1), min(temp_y1), max(temp_x2), max(temp_y2)])
+                #if abs(bb_intersection(curr4, [min(temp_x1), min(temp_y1), max(temp_x2), max(temp_y2)],)) > iou:
+                if bb_intersection(curr4, [min(temp_x1), min(temp_y1), max(temp_x2), max(temp_y2)]) > iou:
+                    if debugMode.lower() == "yes":
+                        print "tempBoxString:",tempBoxString
+                    mergedBoxesCoordinates.append([min(temp_x1), min(temp_y1), max(temp_x2), max(temp_y2)])
+                    mergedBoxesStrings.append(tempBoxString)
             
     tempRead = open(LOCDB+"dummy.txt","r")
     dummyText = tempRead.read()
@@ -944,31 +985,66 @@ def processIndividualGrobid(tempString):
     return mapXmlOutputIndividual(xmlString)
 
 def processSegment(filename, coordinates): 
+    offset_list = [0]
+    if len(filename) > 1:
+        print "aaaaaaaa:",filename
+        filename = sorted(filename)
+        print "bbbbbbbb:",filename
+        
+        for counter, curr_filename in enumerate(filename):
+            im = Image.open(LOCDB+"images/"+curr_filename)
+            width, height = im.size
+            
+            if counter < len(filename)-1:
+                offset_list.append(width)
+    print "offset_list:",offset_list
     try:
         if filename and coordinates:
             if debugMode.lower() == "yes":
                 print ""
                 print "filename:",filename
                 print "coordinates:",coordinates
-
-            f1 = open(LOCDB +"processed-files/"+"all-text1-"+filename[0][:-4]+".txt", "r")
-            temp_lines = f1.readlines()
-            f1.close()
             
-            f2 = open(LOCDB +"processed-files/"+"all-text-boxes-"+filename[0][:-4]+".txt", "r")
-            temp_boxes = f2.readlines()
-            f2.close()
-            
+            temp_lines = []
+            temp_boxes = []
             lines_found = ""
             boxes_found = []
-            for curr1,curr2  in zip(temp_boxes,temp_lines):
-                curr1 = curr1.split(' ')
-                curr1 = map(int, curr1)
-                temp_iou = bb_intersection(coordinates, curr1)
+            for counter2, curr_filename2 in enumerate(filename):
+                print "/////////////////////////////////////////////////"
+                print "curr_filename2:",curr_filename2
+                print LOCDB +"processed-files/"+"all-text1-"+curr_filename2[:-4]+".txt"
                 
-                if abs(temp_iou) >= 0.5:
-                    lines_found = lines_found+curr2.strip()+" "
-                    boxes_found.append(curr1)
+                if not (os.path.isfile(LOCDB +"processed-files/"+"all-text1-"+curr_filename2[:-4]+".txt")):
+                    continue
+                
+                f1 = open(LOCDB +"processed-files/"+"all-text1-"+curr_filename2[:-4]+".txt", "r")
+                temp_lines = f1.readlines()
+                f1.close()
+                
+                f2 = open(LOCDB +"processed-files/"+"all-text-boxes-"+curr_filename2[:-4]+".txt", "r")
+                temp_boxes = f2.readlines()
+                f2.close()
+            
+            
+                for curr1,curr2  in zip(temp_boxes,temp_lines):
+                    curr1 = curr1.split(' ')
+                    curr1 = map(int, curr1)
+                    print ""
+                    print "curr2:",curr2.strip()
+                    print "curr1:",curr1
+                    curr1[0] = curr1[0]+offset_list[counter2]
+                    curr1[2] = curr1[2]+offset_list[counter2]
+                    print "curr1:",curr1
+                    temp_iou = bb_intersection(coordinates, curr1)
+                    print "temp_iou:",type(temp_iou),type(0.0),temp_iou
+                    #temp_iou = bb_intersection_strange(coordinates, curr1)
+                    
+                    #if abs(temp_iou) >= 0.5:
+                    if temp_iou > 0.0:
+                        lines_found = lines_found+curr2.strip()+" "
+                        boxes_found.append(curr1)
+                        print ""
+                        print "curr1:",curr1
                     
             lines_found = lines_found.strip()
             temp_x1 = []
@@ -1047,5 +1123,128 @@ def moveProcessedFiles(filename):
     os.system("mv "+LOCDB+"tmp/all-text1-"+filename[:-4]+".txt "+LOCDB+"processed-files/all-text1-"+filename[:-4]+".txt")
     os.system("mv "+LOCDB+"tmp/all-text2-"+filename[:-4]+".txt "+LOCDB+"processed-files/all-text2-"+filename[:-4]+".txt")
     os.system("mv "+LOCDB+"images-tmp/"+filename+" "+LOCDB+"images/" + filename)
-
     
+def draw_bbox_from_xml_output():
+	# Paths for drawing boxes from output over input images
+	xmlPath = LOCDB+"output/"
+	imgPath = LOCDB+"images/"
+	outputPath = LOCDB+"static/visualize-outputs/"
+    
+	allFilenames = []
+	for (dirpath, dirnames, filenames) in os.walk(xmlPath):
+		allFilenames.extend(dirnames)
+		break
+
+	print "Total Files:",len(allFilenames)
+	for currFile in allFilenames:
+		if (os.path.isfile(outputPath+currFile)):
+			continue
+		
+		if not os.path.isfile(xmlPath+currFile+"/Output"+currFile+".xml"):
+			continue
+		
+		with open(xmlPath+currFile+"/Output"+currFile+".xml") as f:
+			xmldata = f.read()
+			parsXmlsoup = bs.BeautifulSoup(xmldata,'xml')
+		
+		#xmltags= parsXmlsoup.find_all('rawString',coordinates=True)
+		xmltags= parsXmlsoup.find_all('BibStructured')
+		nametags= parsXmlsoup.find_all('algorithm',fname=True)
+		
+		for currfname in nametags:
+			tempName = currFile
+			if not os.path.isfile(imgPath+tempName):
+				break
+			ensamble = []
+			parscit = []
+			image = []
+			img = cv2.imread(imgPath+tempName)  
+			print "len(xmltags):",len(xmltags)
+			#print "xmltags:",xmltags
+			for currtag in xmltags:
+				tag = currtag.rawString
+				print ""
+				#print "currtag:",currtag
+				print "str(currtag['namer']):",str(currtag['namer'])
+				print "str(currtag['detector']):",str(currtag['detector'])
+				print "tag:",tag
+				#b = 0
+				#g = 255
+				#r = 0
+				
+				if currtag.has_attr('detector'):
+					"""if str(tag['source']) == "Ensembled":
+						if tag.has_attr('coordinates'):
+							tempStr = str(tag['coordinates'])
+							chunks = tempStr.split(' ')
+							try:
+								ensamble.append([int(chunks[0]),int(chunks[1]),int(chunks[2]),int(chunks[3])])
+							except ValueError:
+								print "Error: In file",tempName,"Coordinates are not integers..."
+						else:
+							print tempName,"has no 'coordinates' attribute"
+					"""
+					#elif str(tag['source']) == "ParsCit":
+					if str(currtag['detector']) == "ParsCit":
+						if tag.has_attr('coordinates'):
+							tempStr = str(tag['coordinates'])
+							chunks = tempStr.split(' ')
+							try:
+								print "ParsCit:",int(chunks[0]),int(chunks[1]),int(chunks[2]),int(chunks[3])
+								parscit.append([int(chunks[0]),int(chunks[1]),int(chunks[2]),int(chunks[3])])
+							except ValueError:
+								print "Error: In file",tempName,"Coordinates are not integers..."
+						else:
+							print tempName,"has no 'coordinates' attribute"
+					elif str(currtag['detector']) == "Image":
+						if str(currtag['namer']) == "ParsCit":
+							if tag.has_attr('coordinates'):
+								tempStr = str(tag['coordinates'])
+								chunks = tempStr.split(' ')
+								if [int(chunks[0]),int(chunks[1]),int(chunks[2]),int(chunks[3])] in image:
+									print "Removing",int(chunks[0]),int(chunks[1]),int(chunks[2]),int(chunks[3]),"from image"
+									del image[image.index([int(chunks[0]),int(chunks[1]),int(chunks[2]),int(chunks[3])])]
+								try:
+									print "Ensamble:",int(chunks[0]),int(chunks[1]),int(chunks[2]),int(chunks[3])
+									ensamble.append([int(chunks[0]),int(chunks[1]),int(chunks[2]),int(chunks[3])])
+								except ValueError:
+									print "Error: In file",tempName,"Coordinates are not integers..."
+							else:
+								print tempName,"has no 'coordinates' attribute"
+						else:
+							if tag.has_attr('coordinates'):
+								tempStr = str(tag['coordinates'])
+								chunks = tempStr.split(' ')
+								if [int(chunks[0]),int(chunks[1]),int(chunks[2]),int(chunks[3])] in ensamble:
+									print "Skipping:",int(chunks[0]),int(chunks[1]),int(chunks[2]),int(chunks[3])
+									continue
+								try:
+									print "Image:",int(chunks[0]),int(chunks[1]),int(chunks[2]),int(chunks[3])
+									image.append([int(chunks[0]),int(chunks[1]),int(chunks[2]),int(chunks[3])])
+								except ValueError:
+									print "Error: In file",tempName,"Coordinates are not integers..."
+							else:
+								print tempName,"has no 'coordinates' attribute"
+				else:
+					print tempName,"has no 'source' attribute"
+			
+			print "tempName:",tempName
+			print "len(parscit):",len(parscit)
+			print "len(image):",len(image)
+			print ""
+			for counter,curr1 in enumerate(image):
+				cv2.putText(img,str(counter),(curr1[0]-50,curr1[1]), cv2.FONT_HERSHEY_SIMPLEX, 1,(0,215,255),2,cv2.LINE_AA)
+				cv2.rectangle(img,(curr1[0],curr1[1]),(curr1[2],curr1[3]),(0,215,255),2)
+			
+			for counter,curr2 in enumerate(parscit):
+				cv2.putText(img,str(counter),(curr2[0]-60,curr2[1]), cv2.FONT_HERSHEY_SIMPLEX, 1,(255,0,0),2,cv2.LINE_AA)
+				cv2.rectangle(img,(curr2[0],curr2[1]),(curr2[2],curr2[3]),(255,0,0),2)
+			
+			for counter,curr3 in enumerate(ensamble):
+				cv2.putText(img,str(counter),(curr3[0]-70,curr3[1]), cv2.FONT_HERSHEY_SIMPLEX, 1,(0,255,0),2,cv2.LINE_AA)
+				cv2.rectangle(img,(curr3[0],curr3[1]),(curr3[2],curr3[3]),(0,255,0),3)
+				
+			cv2.imwrite(outputPath+tempName,img) 
+
+def parscitOutputToGrobid(xmlsoup):
+    xmltags = xmlsoup.find_all('citation', attrs={"valid" : "true"})

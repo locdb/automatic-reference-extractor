@@ -7,7 +7,10 @@ from imgProcessing import fileuploadIMG, processSegment
 from pathParameter import LOCDB, debugMode
 import pyPdf
 import collections
-from flask import Response
+from flask import Response, url_for
+from urllib import urlopen
+import bs4 as bs
+import natsort
 
 '''
 Description:
@@ -67,13 +70,15 @@ def processFile(UPLOAD_FOLDER,OUTPUT_FOLDER, MAX_PROCESSES, Settings, filenameLi
                 if debugMode.lower() == "yes":
                     print "Single Page PDF"
                 os.system("convert -density 300 "+LOCDB+UPLOAD_FOLDER+filename+" -quality 90 "+LOCDB+UPLOAD_FOLDER+filename[:-4]+".jpg")
-                os.remove(LOCDB+UPLOAD_FOLDER+filename)
+                os.system("mv "+LOCDB+UPLOAD_FOLDER+filename+" "+LOCDB+"processed-files/"+filename)
+                #os.remove(LOCDB+UPLOAD_FOLDER+filename)
                 del filenameList[i]
                 filenameList.append(filename[:-4]+".jpg")
                 continue
             elif pages > 1:                
                 os.system("convert -density 300 "+LOCDB+UPLOAD_FOLDER+filename+" -quality 90 "+LOCDB+UPLOAD_FOLDER+filename[:-4]+".jpg")
-                os.remove(LOCDB+UPLOAD_FOLDER+filename)
+                os.system("mv "+LOCDB+UPLOAD_FOLDER+filename+" "+LOCDB+"processed-files/"+filename)
+                #os.remove(LOCDB+UPLOAD_FOLDER+filename)
                 f = []
                 for (dirpath, dirnames, filenames) in os.walk(LOCDB+UPLOAD_FOLDER):
                     f.extend(filenames)
@@ -113,6 +118,7 @@ def processFile(UPLOAD_FOLDER,OUTPUT_FOLDER, MAX_PROCESSES, Settings, filenameLi
     pool.close()
     pool.join()
     
+    filenameList = natsort.natsorted(filenameList)
     result = createResultView(OUTPUT_FOLDER, filenameList)
     return Response(result, content_type='text/xml; charset=utf-8')
 
@@ -178,11 +184,13 @@ def createResultView(OUTPUT_FOLDER, files_list, mode=1):
         if not found:
             missList.append(file)    
     
+    resultList = natsort.natsorted(resultList)
     if debugMode.lower() == "yes":
         print ""
         print "resultList (before):",resultList
     
     resultList = findLatest(resultList)
+    resultList = natsort.natsorted(resultList)
     if debugMode.lower() == "yes":
         print ""
         print "resultList (after):",resultList
@@ -213,6 +221,18 @@ Output:
 short list with only latest version
 '''
 def findLatest(files_list):
+    '''files_list = sorted(files_list)
+    if len(files_list) > 1:
+        counter = 0
+        for x in files_list:
+            print "counter:",counter
+            print x[-10:-5]
+            if ("-crop" == str(x[-10:-5])) or ("-crop" == str(x[-11:-6])):
+                print x
+                del files_list[counter]
+            else:
+                counter += 1
+    '''
     if debugMode.lower() == "yes":
         print ""
         print "####################################"
@@ -221,10 +241,12 @@ def findLatest(files_list):
         print "####################################"
         print ""
     
+    
     newList = []
     latest_timestamp = files_list[0].split("_",1)[0]
     for i,curr in enumerate(files_list):
         new_timestamp = curr.split("_",1)[0]
+        print "new_timestamp:",new_timestamp
         
         if ((i > 0) and (new_timestamp >= old_timestamp)) or (len(files_list) == 1):
             latest_timestamp = new_timestamp
@@ -277,3 +299,123 @@ def filterCropFiles(latestFileNames):
 
 def coordinatesLookup(tempfilename, temp_coordinates):
     return processSegment(tempfilename, temp_coordinates)
+
+def getFilenames(path):
+    f = []
+    for (dirpath, dirnames, filenames) in os.walk(path):
+        f.extend(filenames)
+        break
+    return f
+
+def getFoldernames(path):
+    f = []
+    for (dirpath, dirnames, filenames) in os.walk(path):
+        f.extend(dirnames)
+        break
+    return f
+
+def getxmlNames(dirlist):
+    f = []
+    for curr in dirlist:
+        f.append("Output"+curr+".xml")
+    return f
+
+def shortlistFiles(files_list, ext):
+    shortlisted = []
+    for curr in files_list:
+        if curr[-3:].lower() == ext.lower():
+            shortlisted.append(curr)
+    return shortlisted
+
+def crossMatchFiles(imglist, xmllist):
+    matched_images = []
+    matched_xml = []
+    for curr1 in imglist:
+        if "Output"+curr1+".xml" in xmllist:
+            matched_images.append(curr1)
+            matched_xml.append("Output"+curr1+".xml")
+    
+    return matched_images, matched_xml
+
+def updateVisualizeResults():
+    #base_page = LOCDB+"templates/base.html"
+    imageDir = "static/visualize-outputs/"
+    xmlDir = "static/xmls/"
+    all_images_files = []
+    all_xml_files = []
+    all_images_files = getFilenames(imageDir)
+    all_xml_files = getFilenames(xmlDir)
+    
+    if len(all_xml_files) == 0:
+        all_xml_files = getFoldernames(xmlDir)
+        all_xml_files = getxmlNames(all_xml_files)
+    
+    #all_images_files = shortlistFiles(all_images_files, 'png')
+    all_xml_files = shortlistFiles(all_xml_files, 'xml')
+    
+    all_images_files, all_xml_files = crossMatchFiles(all_images_files, all_xml_files)
+    print "all_images_files:",len(all_images_files)
+    print "all_images_files:",all_images_files
+    print "all_xml_files:",len(all_xml_files)
+    print "all_xml_files:",all_xml_files
+    #webpage = urlopen(base_page).read().decode('utf-8')
+    #soup = bs.BeautifulSoup(webpage, 'lxml')
+    #mydiv = soup.find("div", {"class": "row"})
+    
+    final_tag_string = ""
+    row_tags_counter = 0
+    soup = bs.BeautifulSoup('<div class="row"></div>', 'lxml')
+    mydiv = soup.div
+    
+    #print "mydiv:",mydiv
+    
+    print "all_images_files:",all_images_files
+    all_images_files = sorted(all_images_files, reverse=True)
+    all_xml_files = sorted(all_xml_files, reverse=True)
+    
+    print ""
+    print "all_images_files:",all_images_files
+    
+    for curr1, curr2 in zip(all_images_files, all_xml_files):
+        print "curr1:",curr1
+        actual_filename = curr1[15:]
+        aaa = url_for("static", filename='visualize-outputs/'+curr1)
+        bbb = url_for("static", filename='xmls/'+'Output'+curr1+'.xml')
+        soup_string = '<div class="col-md-4">\n\
+            <div class="thumbnail">\n\
+                <a class="lightbox" href="'+aaa+'">\n\
+                    <img src="'+aaa+'" alt="'+curr1+'"></a>\n\
+                    <div class="caption">\n\
+                        <h3>'+actual_filename+'</h3>\n\
+                        <p>\n\
+                            <a class="xmlLink" href="'+bbb+'" target="_blank">XML Output</a>\n\
+                        </p>\n\
+                    </div>\n\
+                </div>\n\
+            \t</div>\n'
+        temp_soup = bs.BeautifulSoup(soup_string, "lxml")
+        print "temp_soup:",temp_soup.div
+        print ""
+        mydiv.append(temp_soup.div)
+        children = mydiv.findChildren("div" , recursive=False)
+        print "children:",len(children)
+        print ""
+        row_tags_counter += 1
+        
+        if row_tags_counter == 3:
+            row_tags_counter = 0
+            final_tag_string += str(mydiv)
+            #mydiv = soup.find("div", {"class": "row"})
+            soup = bs.BeautifulSoup('<div class="row"></div>', 'lxml')
+            mydiv = soup.div
+    
+    #print(soup.prettify())
+    #file_obj = open(LOCDB+"templates/visualize_results.html","w")
+    #file_obj.write(str(soup))
+    #file_obj.close()
+    
+    #with open(LOCDB+"templates/visualize_results.html", "w") as file:
+    #    file.write(str(soup))
+    if mydiv.findChildren("div" , recursive=False) > 0: 
+        final_tag_string += str(mydiv)
+    return final_tag_string

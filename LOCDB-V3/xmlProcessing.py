@@ -50,9 +50,7 @@ def fileuploadXML(UPLOAD_FOLDER, OUTPUT_FOLDER,filename):
         algotag2 = outputxmlsoup.algorithm
         for currtag in bibtags2:
             algotag2.append(currtag)
-            
-    print "mv "+LOCDB+"tmp/" + filename+ '_XMLdummy.txt '+LOCDB+"processed-files/" + filename+ '_XMLdummy.txt'
-    print "mv "+LOCDB+"tmp/" + filename+ '_ParsXML.xml '+LOCDB+"processed-files/" + filename+ '_ParsXML.xml'
+    
     os.system("mv "+LOCDB+"tmp/" + filename+ '_XMLdummy.txt '+LOCDB+"processed-files/" + filename+ '_XMLdummy.txt')
     os.system("mv "+LOCDB+"tmp/" + filename+ '_ParsXML.xml '+LOCDB+"processed-files/" + filename+ '_ParsXML.xml')
     

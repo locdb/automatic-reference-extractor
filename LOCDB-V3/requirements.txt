@@ -1,0 +1,8 @@
+redis
+rq
+beautifulsoup4
+Pillow
+opencv-python
+pyPdf
+pdfkit
+natsort

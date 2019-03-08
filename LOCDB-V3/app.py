@@ -7,7 +7,7 @@ from flask import Flask, render_template, request, redirect, flash, Response, se
 #from flask_sslify import SSLify
 from werkzeug.utils import secure_filename
 
-from fileProcessor import processFile, check_file_extension, createResultView, findLatest, coordinatesLookup, filterCropFiles
+from fileProcessor import processFile, check_file_extension, createResultView, findLatest, coordinatesLookup, filterCropFiles, updateVisualizeResults
 from logWriter import writeLog, writeUserLog, updateHTML
 from pathParameter import LOCDB, detectronDir, outputPath, modelPath, imagesDir, annotationsDir, debugMode
 import zipfile
@@ -20,6 +20,7 @@ import subprocess
 from rq import Queue
 from rq.job import Job
 from worker import conn
+import natsort
 
 UPLOAD_FOLDER = 'upload/'
 OUTPUT_FOLDER = 'output/'
@@ -102,13 +103,14 @@ def fileupload():
                 return "Error: Invalid file extension..."
         try:
             job = q.enqueue_call(
-            func=processFile, args=(UPLOAD_FOLDER, OUTPUT_FOLDER, MAX_PROCESSES, Settings, filenameFP_List,), result_ttl=8000, timeout=10000
+            func=processFile, args=(UPLOAD_FOLDER, OUTPUT_FOLDER, MAX_PROCESSES, Settings, filenameFP_List,), result_ttl=8000, timeout=80000
             )
             print(job.get_id())
             
             return job.get_id()
             
             #sync process
+            filenameFP_List = natsort.natsorted(filenameFP_List)
             result = createResultView(OUTPUT_FOLDER, filenameFP_List)
             return Response(result, content_type='text/xml; charset=utf-8')
         except:
@@ -142,11 +144,11 @@ def pollresult():
             if file in folder:
                 resultList.append(folder)
     if len(resultList) == 0:
+        file_list = natsort.natsorted(file_list)
         result = createResultView(OUTPUT_FOLDER, file_list)
         return Response(result, content_type='text/xml; charset=utf-8')  
     else:
         return render_template("form_submitocr.html",waiting="1",filesText = fileString)
-
        
 # Method used for the file browser to view already finished files
 @app.route('/fileview/', methods=['GET','POST'])
@@ -171,6 +173,7 @@ def fileview():
         if debugMode.lower() == "yes":
             print "filenameFP_List:",filenameFP_List
             print "OUTPUT_FOLDER:",OUTPUT_FOLDER
+        filenameFP_List = natsort.natsorted(filenameFP_List)
         result = createResultView(OUTPUT_FOLDER, filenameFP_List, 2)
         
         return Response(result, content_type='text/xml; charset=utf-8')
@@ -201,6 +204,8 @@ def getimage():
                     filenameFP_List.append(filenameFP)
             
             allFilenames3 = os.listdir("images")
+            allFilenames3 = natsort.natsorted(allFilenames3)
+            filenameFP_List = natsort.natsorted(filenameFP_List)
             tempFilesList = []
             for currFile1 in filenameFP_List:
                 for currFile2 in allFilenames3:
@@ -225,7 +230,7 @@ def getimage():
                             zf.write(individualFile)
                     os.chdir(currDir)
                     memory_file.seek(0)
-                    return send_file(memory_file, attachment_filename=currFile1+'.zip', as_attachment=True)
+                    return send_file(memory_file, attachment_filename=currFile1[:-4]+'.zip', as_attachment=True)
                 else:
                     return "Error: No Files Found..."
         else:
@@ -236,10 +241,11 @@ def getimage():
 @app.route('/segmentReference/', methods = ['POST', 'GET'])
 def segmentReference():
     if request.method == 'POST':      
-        filename = request.form.get('filename').encode('utf8')
+        filename = request.form.get('filename').encode('utf8')    
+        coordinates = request.form.get('coordinates')
         if debugMode.lower() == "yes":
             print "filename:",filename
-        coordinates = request.form.get('coordinates')
+            print "coordinates:",type(coordinates)
         coordinates = coordinates.strip().split(' ')
         
         if debugMode.lower() == "yes":
@@ -321,6 +327,7 @@ def trigger_training():
             xmldata = f.read().encode('utf-8')
             parsXmlsoup = BeautifulSoup(xmldata,'xml')            
             tempname = parsXmlsoup.filename.string
+            tempname = tempname.replace('.-','-')
             if (tempname[-3:]).lower() != "jpg":
                 if tempname[-1] == ".":
                     tempname = tempname + "jpg"
@@ -391,6 +398,12 @@ def trigger_training():
     os.system("rm "+imagesDir+"*")
     
     return 'Training Finished...'
+
+@app.route('/visualizeResults/')
+def visualizeResults():
+    tags = updateVisualizeResults()
+    #return render_template('visualize_results.html')
+    return render_template('visualize_results.html', divTags = tags)
 
 # Run the app :)
 if __name__ == '__main__':
