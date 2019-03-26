@@ -1,41 +1,36 @@
-'''
-Please comment the correct ABSOLUT paths for the dependencies and 
-do not forget to change the input and output paths if you do not want the default one.
-For the upload and output folders change the paths in the app.py 
-'''
 # Directory which contains the locdb app plus slash
-LOCDB = "/home/locdb/LOCDB/LOCDB-dev/"
+LOCDB = "/path/to/LOCDB-v3/dir/"
 
 # Directory which contains parscit for the reference extraction
-parsCit = "/home/rizvi/ParsCit/bin"
+parsCit = "/path/to/ParsCit/dir"
 
 # Directory in which the jar of pdf inspector is located to convert pdf to txt
 # name of the jar should be: "docears-pdf-inspector.jar"
-pdfInspector = "/home/locdb/LOCDB/LOCDB-dev"
+pdfInspector = ""
 
 # Path to detectron directory
-detectronDir = "/home/locdb/detectron/"
+detectronDir = "/path/to/detectron/dir/"
 
 # Directory in which files will be uploaded
-uploadDir = "/home/locdb/LOCDB/LOCDB-dev/upload/"
+uploadDir = "/path/to/LOCDB-v3/upload/"
 
 # URL of the opeartional Grobid Service
-grobid = "http://pc-4112:8070/api/"
+grobid = "<grobid-service-url>/api/"
 
 # Directory where images of manual corrections are uploaded for re-training
-imagesDir = "/home/locdb/detectron/detectron/datasets/data/LOCDB-finetune/images/"
+imagesDir = "/path/to/images/dir/"
 
 # Directory where annotation files of manual corrections are uploaded for re-training
-annotationsDir = "/home/locdb/detectron/detectron/datasets/data/LOCDB-finetune/xml/"
+annotationsDir = "/path/to/xml/anotations/dir/"
 
 # Directory where images for saving final model after re-training
-outputPath = "/home/locdb/detectron/detectron/datasets/data/LOCDB-finetune/"
+outputPath = "/path/to/output/dir/after/re-training/"
 
 # Directory containing default model for Reference Detection is placed
-modelPath = "/home/locdb/detectron/models/reference-detector/"
+modelPath = "/path/to/reference-detector/model/dir/"
 
 # Directory containing default model for Column Detection is placed
-modelPath2 = "/home/locdb/detectron/models/column-detector/"
+modelPath2 = "/path/to/column-detector/model/dir/"
 
 # Switch for enabling Debug Mode
 debugMode = "yes"
