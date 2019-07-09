@@ -4,7 +4,7 @@ Following are the instructions to install Automatic-Refefence-Extractor and its 
 
 **Requirements:**
 
-- Linux, NVIDIA GPU, Python2, Java 1.8.0.*
+- Linux, NVIDIA GPU with at least 8 GB RAM, Python2, Java 1.8.0.*
 
 ## Installing Dependencies
 
